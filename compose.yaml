@@ -1,0 +1,110 @@
+services:
+  grafana:
+    image: docker.io/grafana/grafana:12.3
+    restart: unless-stopped
+    container_name: grafana
+    ports:
+      - 3000:3000/tcp
+    volumes:
+      - ./configs/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./configs/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - .data/grafana:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      tempo:
+        condition: service_started
+      loki:
+        condition: service_started
+      prometheus:
+        condition: service_started
+      pyroscope:
+        condition: service_started
+
+  otel-collector:
+    image: docker.io/otel/opentelemetry-collector-contrib:0.140.1
+    restart: unless-stopped
+    container_name: otelcollector
+    volumes:
+      - ./configs/otelcol.yaml:/etc/otel/config.yaml:ro
+    depends_on:
+      tempo:
+        condition: service_started
+      loki:
+        condition: service_started
+      prometheus:
+        condition: service_started
+      pyroscope:
+        condition: service_started
+
+  tempo:
+    image: docker.io/grafana/tempo:2.9.0
+    restart: unless-stopped
+    container_name: tempo
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    volumes:
+      - ./configs/tempo.yaml:/etc/tempo/config.yaml:ro
+      - .data/tempo:/data/tempo
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  loki:
+    image: docker.io/grafana/loki:3.5.8
+    restart: unless-stopped
+    container_name: loki
+    volumes:
+      - ./configs/loki.yaml:/etc/loki/local-config.yaml:ro
+      - .data/loki:/data/loki
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  prometheus:
+    image: docker.io/prom/prometheus:v3.7.3
+    restart: unless-stopped
+    container_name: prometheus
+    command:
+      - '--web.enable-remote-write-receiver'
+      - '--web.enable-otlp-receiver'
+      - '--enable-feature=exemplar-storage'
+      - '--enable-feature=native-histograms"'
+      - '--storage.tsdb.path=/data/prometheus'
+    volumes:
+      - ./configs/prometheus.yaml:/prometheus/prometheus.yml:ro
+      - .data/prometheus:/data/prometheus
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  pyroscope:
+    image: docker.io/grafana/pyroscope:1.16.0
+    restart: unless-stopped
+    container_name: pyroscope
+    command: ["--config.file=/etc/pyroscope/config.yaml"]
+    volumes:
+      - ./configs/pyroscope.yaml:/etc/pyroscope/config.yaml:ro
+      - .data/pyroscope:/data/pyroscope
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  init:
+    image: gcr.io/distroless/static:debug
+    restart: no
+    entrypoint: [ "/busybox/sh", "-c" ]
+    command:
+      - |
+        chown 472:0 -R /var/lib/grafana
+        chown 10001:10001 -R /data/tempo
+        chown 10001:10001 -R /data/loki
+        chown 10001:10001 -R /data/pyroscope
+        chown 65534:65534 -R /data/prometheus
+    volumes:
+      - .data/grafana:/var/lib/grafana
+      - .data/tempo:/data/tempo
+      - .data/loki:/data/loki
+      - .data/pyroscope:/data/pyroscope
+      - .data/prometheus:/data/prometheus
