@@ -11,6 +11,13 @@ services:
       - .data/grafana:/var/lib/grafana
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    healthcheck:
+      test: curl -f "http://localhost:3000/api/health"
+      interval: 60s
+      timeout: 1s
+      retries: 3
+      start_period: 1s
+      start_interval: 1s
     depends_on:
       init:
         condition: service_completed_successfully
@@ -29,6 +36,9 @@ services:
     container_name: otelcollector
     volumes:
       - ./configs/otelcol.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - 4317:4317/tcp   # OTLP gRPC receiver
+      - 4318:4318/tcp   # OTLP HTTP receiver
     depends_on:
       tempo:
         condition: service_started
@@ -58,6 +68,13 @@ services:
     volumes:
       - ./configs/loki.yaml:/etc/loki/local-config.yaml:ro
       - .data/loki:/data/loki
+    healthcheck:
+      test: wget --spider -q http://localhost:3100/ready
+      interval: 60s
+      timeout: 1s
+      retries: 3
+      start_period: 1s
+      start_interval: 1s
     depends_on:
       init:
         condition: service_completed_successfully
@@ -75,6 +92,13 @@ services:
     volumes:
       - ./configs/prometheus.yaml:/prometheus/prometheus.yml:ro
       - .data/prometheus:/data/prometheus
+    healthcheck:
+      test: wget --spider -q http://localhost:9090/-/ready
+      interval: 60s
+      timeout: 1s
+      retries: 3
+      start_period: 1s
+      start_interval: 1s
     depends_on:
       init:
         condition: service_completed_successfully
