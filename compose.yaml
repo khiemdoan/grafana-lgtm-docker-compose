@@ -24,9 +24,9 @@ services:
       tempo:
         condition: service_started
       loki:
-        condition: service_started
+        condition: service_healthy
       prometheus:
-        condition: service_started
+        condition: service_healthy
       pyroscope:
         condition: service_started
 
@@ -43,9 +43,9 @@ services:
       tempo:
         condition: service_started
       loki:
-        condition: service_started
+        condition: service_healthy
       prometheus:
-        condition: service_started
+        condition: service_healthy
       pyroscope:
         condition: service_started
 
