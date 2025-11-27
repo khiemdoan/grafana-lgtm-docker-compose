@@ -8,6 +8,7 @@ receivers:
         cors:
           allowed_origins:
             - http://*
+
   prometheus/collector:
     config:
       scrape_configs:
@@ -22,15 +23,34 @@ extensions:
     path: "/ready"
 
 processors:
+  resource:
+    attributes:
+      - action: insert
+        key: loki.format
+        value: raw
+      - action: insert
+        key: loki.resource.labels
+        value: service.name, app, runtime
+
   batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+connectors:
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets: [2ms, 5ms, 10ms, 25ms, 50ms, 100ms, 200ms, 500ms, 1s, 2s, 5s, 10s]
+    aggregation_temporality: "AGGREGATION_TEMPORALITY_CUMULATIVE"
+    metrics_flush_interval: 15s
 
 exporters:
   otlphttp/metrics:
     endpoint: http://prometheus:9090/api/v1/otlp
     tls:
       insecure: true
-  otlphttp/traces:
-    endpoint: http://tempo:4418
+  otlp/traces:
+    endpoint: http://tempo:4317
     tls:
       insecure: true
   otlphttp/logs:
@@ -52,20 +72,20 @@ service:
   extensions: [health_check]
   pipelines:
     traces:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [otlphttp/traces]
-      #exporters: [otlphttp/traces,debug/traces]
+      receivers: [ otlp ]
+      processors: [ batch ]
+      exporters: [ otlp/traces, spanmetrics ]
+      #exporters: [ otlphttp/traces, debug/traces ]
     metrics:
-      receivers: [otlp, prometheus/collector]
-      processors: [batch]
-      exporters: [otlphttp/metrics]
-      #exporters: [otlphttp/metrics,debug/metrics]
+      receivers: [ otlp, spanmetrics ]
+      processors: [ batch ]
+      exporters: [ otlphttp/metrics ]
+      #exporters: [ otlphttp/metrics, debug/metrics ]
     logs:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [otlphttp/logs]
-      #exporters: [otlphttp/logs,debug/logs]
+      receivers: [ otlp ]
+      processors: [ batch, resource ]
+      exporters: [ otlphttp/logs ]
+      #exporters: [ otlphttp/logs, debug/logs ]
     profiles:
       receivers: [otlp]
       exporters: [otlp/profiles]
